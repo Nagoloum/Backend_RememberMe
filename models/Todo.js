@@ -21,6 +21,10 @@ const todoSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  dueTime: {
+    type: String,
+    default: null
+  },
   list: {
     type: String,
     default: 'General',
