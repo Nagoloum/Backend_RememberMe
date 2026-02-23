@@ -6,6 +6,7 @@ const ALLOWED_CREATE_FIELDS = [
   "title",
   "description",
   "dueDate",
+  "dueTime",
   "list",
   "priority",
 ];
@@ -14,6 +15,7 @@ const ALLOWED_UPDATE_FIELDS = [
   "description",
   "completed",
   "dueDate",
+  "dueTime",
   "list",
   "priority",
 ];
@@ -24,6 +26,11 @@ const validateTodoInput = (body, isUpdate = false) => {
 
   if (!body || Object.keys(body).length === 0) {
     throw createHttpError(400, "Aucune donnée fournie");
+  }
+
+  if (body.dueIme !== undefined && body.dueTime === undefined) {
+    body.dueTime = body.dueIme;
+    delete body.dueIme;
   }
 
   // Champs non autorisés
@@ -68,11 +75,19 @@ const validateTodoInput = (body, isUpdate = false) => {
   }
 
   // Description
-  if (body.description !== undefined && typeof body.description !== "string") {
+  if (
+    body.description !== undefined &&
+    body.description !== null &&
+    typeof body.description !== "string"
+  ) {
     throw createHttpError(
       400,
       "La description doit être une chaîne de caractères"
     );
+  }
+
+  if (body.completed !== undefined && typeof body.completed !== "boolean") {
+    throw createHttpError(400, "Le champ completed doit être un booléen");
   }
 
   // DueDate
@@ -84,6 +99,26 @@ const validateTodoInput = (body, isUpdate = false) => {
     throw createHttpError(400, "Format de date invalide pour dueDate");
   }
 
+  if (body.dueDate) {
+    const today = new Date().toISOString().slice(0, 10);
+    const datePart = typeof body.dueDate === "string" ? body.dueDate.slice(0, 10) : null;
+    if (datePart && /^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+      if (datePart < today) {
+        throw createHttpError(400, "La date d'échéance ne peut pas être dans le passé");
+      }
+    }
+  }
+
+  if (body.dueTime !== undefined && body.dueTime !== null) {
+    if (typeof body.dueTime !== "string") {
+      throw createHttpError(400, "Format invalide pour dueTime");
+    }
+    const trimmed = body.dueTime.trim();
+    if (trimmed.length > 0 && !/^([01]\d|2[0-3]):([0-5]\d)$/.test(trimmed)) {
+      throw createHttpError(400, "Format invalide pour dueTime (HH:MM)");
+    }
+  }
+
   // Priority
   if (
     body.priority !== undefined &&
@@ -93,7 +128,7 @@ const validateTodoInput = (body, isUpdate = false) => {
   }
 
   // List
-  if (body.list !== undefined && typeof body.list !== "string") {
+  if (body.list !== undefined && body.list !== null && typeof body.list !== "string") {
     throw createHttpError(400, "La liste doit être une chaîne de caractères");
   }
 };
@@ -122,6 +157,21 @@ exports.getTodos = async (req, res) => {
   }
 };
 
+exports.getTodoById = async (req, res) => {
+  try {
+    const todo = await Todo.findOne({ _id: req.params.id, user: req.userId }).lean();
+    if (!todo) {
+      throw createHttpError(404, "Tâche non trouvée ou accès refusé");
+    }
+    res.json(todo);
+  } catch (err) {
+    console.error("Erreur getTodoById:", err);
+    res.status(err.status || 400).json({
+      message: err.message || "Erreur lors de la récupération de la tâche",
+    });
+  }
+};
+
 // Créer une nouvelle tâche
 exports.createTodo = async (req, res) => {
   try {
@@ -136,6 +186,7 @@ exports.createTodo = async (req, res) => {
     if (req.body.description)
       todoData.description = req.body.description.trim();
     if (req.body.dueDate) todoData.dueDate = new Date(req.body.dueDate);
+    if (req.body.dueTime) todoData.dueTime = req.body.dueTime.trim();
     if (req.body.list !== undefined) {
       todoData.list = req.body.list.trim() || "General";
     } else {
@@ -167,14 +218,22 @@ exports.updateTodo = async (req, res) => {
 
     // Mise à jour contrôlée des champs
     if (req.body.title !== undefined) todo.title = req.body.title.trim();
-    if (req.body.description !== undefined)
-      todo.description = req.body.description.trim();
+    if (req.body.description !== undefined) {
+      if (req.body.description === null) {
+        todo.description = "";
+      } else {
+        todo.description = req.body.description.trim();
+      }
+    }
     if (req.body.completed !== undefined) todo.completed = req.body.completed;
     if (req.body.dueDate !== undefined) {
       todo.dueDate = req.body.dueDate ? new Date(req.body.dueDate) : null;
     }
+    if (req.body.dueTime !== undefined) {
+      todo.dueTime = req.body.dueTime ? req.body.dueTime.trim() : null;
+    }
     if (req.body.list !== undefined)
-      todo.list = req.body.list?.trim() || "General";
+      todo.list = req.body.list === null ? "General" : req.body.list?.trim() || "General";
     if (req.body.priority !== undefined) todo.priority = req.body.priority;
 
     const updatedTodo = await todo.save();

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
   getTodos,
+  getTodoById,
   createTodo,
   updateTodo,
   deleteTodo
@@ -12,6 +13,7 @@ const auth = require('../middleware/auth');
 router.use(auth);
 
 router.get('/todos', getTodos);
+router.get('/todos/:id', getTodoById);
 router.post('/todos', createTodo);
 router.put('/todos/:id', updateTodo);     
 router.delete('/todos/:id', deleteTodo); 
