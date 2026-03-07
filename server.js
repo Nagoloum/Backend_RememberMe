@@ -5,6 +5,7 @@ const connectDB = require('./config/db');
 const todoRoutes = require('./routes/todoRoutes');
 const authRoutes = require('./routes/authRoutes');
 const listRoutes = require('./routes/listRoutes');
+const userRoutes = require('./routes/userRoutes');
 
 const app = express();
 
@@ -15,6 +16,7 @@ app.use('/api/auth', authRoutes); // Routes d'authentification
 
 app.use('/api', todoRoutes); // Préfixe /api pour scalabilité
 app.use('/api', listRoutes);
+app.use('/api', userRoutes);
 
 module.exports = app;
 

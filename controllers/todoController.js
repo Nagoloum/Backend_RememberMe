@@ -136,13 +136,21 @@ const validateTodoInput = (body, isUpdate = false) => {
 // Récupérer toutes les tâches de l'utilisateur connecté
 exports.getTodos = async (req, res) => {
   try {
-    const { list, completed } = req.query;
+    const { list, completed, dueDate } = req.query;
 
     // Construction du filtre
     let filter = { user: req.userId };
 
     if (list) filter.list = list;
     if (completed !== undefined) filter.completed = completed === "true";
+    if (dueDate !== undefined) {
+      if (typeof dueDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+        throw createHttpError(400, "Format invalide pour dueDate (YYYY-MM-DD)");
+      }
+      const start = new Date(`${dueDate}T00:00:00.000Z`);
+      const end = new Date(`${dueDate}T23:59:59.999Z`);
+      filter.dueDate = { $gte: start, $lte: end };
+    }
 
     const todos = await Todo.find(filter)
       .sort({ dueDate: 1, createdAt: -1 }) // Priorité aux dates proches
@@ -153,6 +161,31 @@ exports.getTodos = async (req, res) => {
     console.error("Erreur getTodos:", err);
     res.status(err.status || 500).json({
       message: err.message || "Erreur lors de la récupération des tâches",
+    });
+  }
+};
+
+exports.getTodayNotifications = async (req, res) => {
+  try {
+    const date = typeof req.query?.date === "string" ? req.query.date : null;
+    const day = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : new Date().toISOString().slice(0, 10);
+
+    const start = new Date(`${day}T00:00:00.000Z`);
+    const end = new Date(`${day}T23:59:59.999Z`);
+
+    const todos = await Todo.find({
+      user: req.userId,
+      completed: false,
+      dueDate: { $gte: start, $lte: end },
+    })
+      .sort({ dueTime: 1, createdAt: -1 })
+      .lean();
+
+    res.json({ date: day, todos });
+  } catch (err) {
+    console.error("Erreur getTodayNotifications:", err);
+    res.status(err.status || 500).json({
+      message: err.message || "Erreur lors de la récupération des notifications",
     });
   }
 };

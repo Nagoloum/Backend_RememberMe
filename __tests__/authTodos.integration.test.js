@@ -164,4 +164,73 @@ describe('Auth + CRUD Todos', () => {
 
     expect(getOther.status).toBe(404);
   });
+
+  test('Expose et met à jour le profil utilisateur (settings)', async () => {
+    const register = await request(app).post('/api/auth/register').send({
+      name: 'Alice',
+      email: 'alice2@example.com',
+      password: 'secret123',
+    });
+
+    expect(register.status).toBe(201);
+    const token = register.body.token;
+
+    const me = await request(app)
+      .get('/api/users/me')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(me.status).toBe(200);
+    expect(me.body.email).toBe('alice2@example.com');
+    expect(typeof me.body.notificationsEnabled).toBe('boolean');
+
+    const updated = await request(app)
+      .patch('/api/users/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Alice Updated', notificationsEnabled: false, notificationTime: '08:30' });
+
+    expect(updated.status).toBe(200);
+    expect(updated.body.name).toBe('Alice Updated');
+    expect(updated.body.notificationsEnabled).toBe(false);
+    expect(updated.body.notificationTime).toBe('08:30');
+  });
+
+  test('Retourne les notifications du jour (todos due aujourd’hui)', async () => {
+    const register = await request(app).post('/api/auth/register').send({
+      name: 'Notify User',
+      email: 'notify@example.com',
+      password: 'secret123',
+    });
+
+    expect(register.status).toBe(201);
+    const token = register.body.token;
+    const today = new Date().toISOString().slice(0, 10);
+
+    const created = await request(app)
+      .post('/api/todos')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'Due today', dueDate: today, dueTime: '07:00' });
+
+    expect(created.status).toBe(201);
+
+    const notif = await request(app)
+      .get('/api/notifications/today')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(notif.status).toBe(200);
+    expect(notif.body.date).toBe(today);
+    expect(Array.isArray(notif.body.todos)).toBe(true);
+    expect(notif.body.todos.some((t) => t.title === 'Due today')).toBe(true);
+
+    await request(app)
+      .put(`/api/todos/${created.body._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ completed: true });
+
+    const notif2 = await request(app)
+      .get('/api/notifications/today')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(notif2.status).toBe(200);
+    expect(notif2.body.todos.some((t) => t._id === created.body._id)).toBe(false);
+  });
 });

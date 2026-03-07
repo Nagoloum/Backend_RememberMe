@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
   getTodos,
+  getTodayNotifications,
   getTodoById,
   createTodo,
   updateTodo,
@@ -13,6 +14,7 @@ const auth = require('../middleware/auth');
 router.use(auth);
 
 router.get('/todos', getTodos);
+router.get('/notifications/today', getTodayNotifications);
 router.get('/todos/:id', getTodoById);
 router.post('/todos', createTodo);
 router.put('/todos/:id', updateTodo);     
