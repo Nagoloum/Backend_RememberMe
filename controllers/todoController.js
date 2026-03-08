@@ -1,3 +1,4 @@
+const connectDB = require("../config/db");
 const createHttpError = require("http-errors");
 const Todo = require("../models/Todo");
 
@@ -28,6 +29,7 @@ const validateTodoInput = (body, isUpdate = false) => {
     throw createHttpError(400, "Aucune donnée fournie");
   }
 
+  // Correction typo : dueIme → dueTime
   if (body.dueIme !== undefined && body.dueTime === undefined) {
     body.dueTime = body.dueIme;
     delete body.dueIme;
@@ -136,9 +138,10 @@ const validateTodoInput = (body, isUpdate = false) => {
 // Récupérer toutes les tâches de l'utilisateur connecté
 exports.getTodos = async (req, res) => {
   try {
+    await connectDB(); // ← Ajout essentiel pour Vercel
+
     const { list, completed, dueDate } = req.query;
 
-    // Construction du filtre
     let filter = { user: req.userId };
 
     if (list) filter.list = list;
@@ -153,12 +156,12 @@ exports.getTodos = async (req, res) => {
     }
 
     const todos = await Todo.find(filter)
-      .sort({ dueDate: 1, createdAt: -1 }) // Priorité aux dates proches
-      .lean(); // Plus performant pour lecture seule
+      .sort({ dueDate: 1, createdAt: -1 })
+      .lean();
 
     res.json(todos);
   } catch (err) {
-    console.error("Erreur getTodos:", err);
+    console.error("Erreur getTodos:", err.message, err.stack);
     res.status(err.status || 500).json({
       message: err.message || "Erreur lors de la récupération des tâches",
     });
@@ -167,6 +170,8 @@ exports.getTodos = async (req, res) => {
 
 exports.getTodayNotifications = async (req, res) => {
   try {
+    await connectDB();
+
     const date = typeof req.query?.date === "string" ? req.query.date : null;
     const day = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : new Date().toISOString().slice(0, 10);
 
@@ -183,7 +188,7 @@ exports.getTodayNotifications = async (req, res) => {
 
     res.json({ date: day, todos });
   } catch (err) {
-    console.error("Erreur getTodayNotifications:", err);
+    console.error("Erreur getTodayNotifications:", err.message, err.stack);
     res.status(err.status || 500).json({
       message: err.message || "Erreur lors de la récupération des notifications",
     });
@@ -192,13 +197,15 @@ exports.getTodayNotifications = async (req, res) => {
 
 exports.getTodoById = async (req, res) => {
   try {
+    await connectDB();
+
     const todo = await Todo.findOne({ _id: req.params.id, user: req.userId }).lean();
     if (!todo) {
       throw createHttpError(404, "Tâche non trouvée ou accès refusé");
     }
     res.json(todo);
   } catch (err) {
-    console.error("Erreur getTodoById:", err);
+    console.error("Erreur getTodoById:", err.message, err.stack);
     res.status(err.status || 400).json({
       message: err.message || "Erreur lors de la récupération de la tâche",
     });
@@ -208,6 +215,8 @@ exports.getTodoById = async (req, res) => {
 // Créer une nouvelle tâche
 exports.createTodo = async (req, res) => {
   try {
+    await connectDB();
+
     validateTodoInput(req.body, false);
 
     const todoData = {
@@ -215,25 +224,19 @@ exports.createTodo = async (req, res) => {
       user: req.userId,
     };
 
-    // Ajout des champs optionnels si présents
-    if (req.body.description)
-      todoData.description = req.body.description.trim();
+    if (req.body.description) todoData.description = req.body.description.trim();
     if (req.body.dueDate) todoData.dueDate = new Date(req.body.dueDate);
     if (req.body.dueTime) todoData.dueTime = req.body.dueTime.trim();
-    if (req.body.list !== undefined) {
-      todoData.list = req.body.list.trim() || "General";
-    } else {
-      todoData.list = "General";
-    }
+    todoData.list = req.body.list?.trim() || "General";
     if (req.body.priority) todoData.priority = req.body.priority;
 
     const newTodo = await Todo.create(todoData);
 
     res.status(201).json(newTodo);
   } catch (err) {
-    console.error("Erreur createTodo:", err);
+    console.error("Erreur createTodo:", err.message, err.stack);
     res.status(err.status || 400).json({
-      message: err.message || "Erreur lors de la création de la tâche", 
+      message: err.message || "Erreur lors de la création de la tâche",
     });
   }
 };
@@ -241,6 +244,8 @@ exports.createTodo = async (req, res) => {
 // Mettre à jour une tâche
 exports.updateTodo = async (req, res) => {
   try {
+    await connectDB();
+
     validateTodoInput(req.body, true);
 
     const todo = await Todo.findOne({ _id: req.params.id, user: req.userId });
@@ -249,14 +254,9 @@ exports.updateTodo = async (req, res) => {
       throw createHttpError(404, "Tâche non trouvée ou accès refusé");
     }
 
-    // Mise à jour contrôlée des champs
     if (req.body.title !== undefined) todo.title = req.body.title.trim();
     if (req.body.description !== undefined) {
-      if (req.body.description === null) {
-        todo.description = "";
-      } else {
-        todo.description = req.body.description.trim();
-      }
+      todo.description = req.body.description === null ? "" : req.body.description.trim();
     }
     if (req.body.completed !== undefined) todo.completed = req.body.completed;
     if (req.body.dueDate !== undefined) {
@@ -265,15 +265,16 @@ exports.updateTodo = async (req, res) => {
     if (req.body.dueTime !== undefined) {
       todo.dueTime = req.body.dueTime ? req.body.dueTime.trim() : null;
     }
-    if (req.body.list !== undefined)
-      todo.list = req.body.list === null ? "General" : req.body.list?.trim() || "General";
+    if (req.body.list !== undefined) {
+      todo.list = req.body.list === null ? "General" : (req.body.list?.trim() || "General");
+    }
     if (req.body.priority !== undefined) todo.priority = req.body.priority;
 
     const updatedTodo = await todo.save();
 
     res.json(updatedTodo);
   } catch (err) {
-    console.error("Erreur updateTodo:", err);
+    console.error("Erreur updateTodo:", err.message, err.stack);
     res.status(err.status || 400).json({
       message: err.message || "Erreur lors de la mise à jour de la tâche",
     });
@@ -283,6 +284,8 @@ exports.updateTodo = async (req, res) => {
 // Supprimer une tâche
 exports.deleteTodo = async (req, res) => {
   try {
+    await connectDB();
+
     const todo = await Todo.findOneAndDelete({
       _id: req.params.id,
       user: req.userId,
@@ -291,15 +294,15 @@ exports.deleteTodo = async (req, res) => {
     if (!todo) {
       throw createHttpError(404, "Tâche non trouvée ou accès refusé");
     }
-    //rafraichier la liste des taches
-    const todos = await Todo.find({ user: req.userId }).sort({
-      dueDate: 1,
-      createdAt: -1,
-    });
 
-    res.json({ message: "Tâche supprimée avec succès", todos });
+    // Rafraîchir la liste (optionnel mais utile pour le frontend)
+    const remainingTodos = await Todo.find({ user: req.userId })
+      .sort({ dueDate: 1, createdAt: -1 })
+      .lean();
+
+    res.json({ message: "Tâche supprimée avec succès", todos: remainingTodos });
   } catch (err) {
-    console.error("Erreur deleteTodo:", err);
+    console.error("Erreur deleteTodo:", err.message, err.stack);
     res.status(err.status || 500).json({
       message: err.message || "Erreur lors de la suppression de la tâche",
     });

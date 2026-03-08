@@ -1,78 +1,63 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const User = require("../models/User");
-const jwt = require("jsonwebtoken");
+const User = require('../models/User');
+const jwt = require('jsonwebtoken');
+const connectDB = require('../config/db');
 
-// Inscription
-router.post("/register", async (req, res) => {
+router.post('/register', async (req, res) => {
   try {
+    await connectDB();
     const { name, email, password } = req.body;
 
-    // Vérifier si l'utilisateur existe déjà
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ message: "Cet email est déjà utilisé" });
+      return res.status(400).json({ message: 'Cet email est déjà utilisé' });
     }
 
-    // Créer l'utilisateur (le mot de passe sera haché automatiquement)
     const user = await User.create({ name, email, password });
 
-    // Générer un token
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "5d", // Le token expire en 5 jours
+      expiresIn: '5d',
     });
 
     res.status(201).json({
-      message: "Utilisateur créé avec succès",
+      message: 'Utilisateur créé avec succès',
       token,
       user: { id: user._id, name: user.name, email: user.email },
     });
   } catch (err) {
-    console.error("Erreur lors de l'authentification :", err); // ← Log détaillé
-    res.status(500).json({
-      message: "Erreur serveur",
-      details: err.message, // ← On voit l'erreur réelle côté frontend aussi
-    });
+    console.error('Erreur register :', err);
+    res.status(500).json({ message: 'Erreur serveur', error: err.message });
   }
 });
 
-// Connexion
-router.post("/login", async (req, res) => {
+router.post('/login', async (req, res) => {
   try {
+    await connectDB(); // ← ajouté ici aussi
     const { email, password } = req.body;
 
-    // Trouver l'utilisateur
     const user = await User.findOne({ email });
-    if (!user) { 
-      return res
-        .status(401)
-        .json({ message: "Email ou mot de passe incorrect" });
+    if (!user) {
+      return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
     }
 
-    // Vérifier le mot de passe
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return res
-        .status(401)
-        .json({ message: "Email ou mot de passe incorrect" });
+      return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
     }
 
-    // Générer un token
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
+      expiresIn: '7d',
     });
 
     res.json({
-      message: "Connexion réussie",
+      message: 'Connexion réussie',
       token,
       user: { id: user._id, name: user.name, email: user.email },
     });
   } catch (err) {
-    console.error("Erreur lors de l'authentification :", err); // ← Log détaillé
-    res.status(500).json({
-      message: "Erreur serveur",
-      details: err.message, // ← On voit l'erreur réelle côté frontend aussi
-    });
+    console.error('Erreur login :', err);
+    res.status(500).json({ message: 'Erreur serveur', error: err.message });
   }
 });
 
