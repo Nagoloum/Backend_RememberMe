@@ -1,5 +1,3 @@
-// api/index.js  (ou server.js – place-le dans le dossier /api pour Vercel)
-
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
