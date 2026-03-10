@@ -60,7 +60,6 @@ app.get('/', (req, res) => {
     message: "Bienvenue sur l'API Remember Me !",
     status: "online",
     docs: "/api/test pour tester",
-    routes: ["/api/auth", "/api/todos", "/api/lists", "/api/users"]
   });
 });
 app.use((req, res) => res.status(404).json({ message: 'Not found' }));
